@@ -2,6 +2,7 @@ import numpy as np
 from PIL import Image
 from scipy.ndimage.filters import convolve
 from scipy.misc import imresize
+from save_svg import *
 
 def rad(s):
 	return int(s/2)
@@ -58,18 +59,6 @@ def display_strokes(img, strokes,s):
 			cover_point(stroke_img, s, p[0], p[1])
 
 	display_img(stroke_img)
-	'''
-	import matplotlib.pyplot as plt
-	fig=plt.figure(1)
-	plt.axis([0,img.shape[0],0,img.shape[1]])
-	ax=fig.add_subplot(1,1,1)
-	for stroke in strokes:
-		for p in stroke:
-			circle = plt.Circle(p, radius=r, color='b')
-			ax.add_patch(circle)
-	plt.show()
-	'''
-
 
 def rgb2grey(rgb):
 	return np.dot(rgb[...,:3], [0.299, 0.587, 0.114])
@@ -153,10 +142,10 @@ if __name__ == '__main__':
 	# start from an arbitrary point in the image
 	# 
 	s = 3
-	img = rgb2grey(np.array(Image.open('data/squanch_gash.jpg')))
+	img = rgb2grey(np.array(Image.open('data/blue_morpho.jpg')))
 	img_og = img
 	img = imresize(img, (300,300))
-	img = threshold(img/255., 0.5)
+	img = threshold(img/255., 0.7)
 	img = 1-img
 	#display_img(img)
 	#img = np.ones((8,8))
@@ -164,6 +153,7 @@ if __name__ == '__main__':
 
 	#cv = correlate(img, mask, 10,10)
 
-	strokes = choose_strokes(img, s, 5, 2000)
-	display_strokes(img, strokes, s)
+	strokes = choose_strokes(img, s, 20, 500)
+	#display_strokes(img, strokes, s)
+	save_strokes(strokes, 5)
 	#stroke = choose_stroke(img, s, 5)

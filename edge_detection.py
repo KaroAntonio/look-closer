@@ -14,6 +14,7 @@ import phasepack as pp
 from scipy.misc import imresize
 from filters import *
 from utils import *
+from choose_strokes import *
 
 def sobel_edges(im,mode='constant',):
 	dx = sobel(im, 1,mode=mode)  # horizontal derivative
@@ -50,15 +51,16 @@ def sharpen(f):
 data_folder_fid = 'data/leedsbutterfly/images/'
 img_data = Image.open(data_folder_fid+'003_0009.jpg')
 
-img_data = Image.open('data/out_butter.jpg')
+#img_data = Image.open('data/leedsbutterfly/images/001_0007.jpg')
+img_data = Image.open('data/squanch_fuzz.jpg')
 
 size = 256  # size the image large first, and then resize it smaller, 
 				# for better lines
 #img = img_data.reshape(3,1024).T.reshape(32,32,3) #for cifar
 img = np.asarray( img_data, dtype='uint8' )
 og_img = img
-#img = crop_centre_square(img)
-#img = imresize(img,(size, size))
+img = crop_centre_square(img)
+img = imresize(img,(size, size))
 gray_img = rgb2gray(img)
 ps = PencilSketch(gray_img.shape)
 ps_img = ps.render(img)
@@ -80,7 +82,15 @@ img = equalize(img)
 #img = pp.phasecong(img)[2] # whaaaat is this??
 #img = pp.phasecong(img)[0]
 img = sobel_edges(img,mode='constant') # very strokey!
+edges = img
 #img = canny_edges(img)
+#img = threshold(img, img.mean())
 
+'''
 plt.imshow(img,cmap = plt.get_cmap('gray'))
 plt.show()
+'''
+
+strokes = choose_strokes(img, 13, 20, 700)
+save_strokes(strokes)
+
