@@ -5,6 +5,25 @@ import numpy as np
 import math
 import xml.etree.ElementTree
 
+def remove_ocd_paths(fid, out_fid='out.svg'):
+	''' a hacky fix for the extra paths added at 0,0 '''
+	f = open(fid)		
+	lines = f.readlines()
+	f.close()
+
+	i = 0
+	while i < len(lines):
+		line = lines[i]
+		is_small_g = 'id="line2d_' in line and '</g>' in lines[i+3]
+		if is_small_g and int(line.split('_')[1].split('"')[0])%2==0:
+			lines = lines[:i] + lines[i+4:]
+		else: 
+			i += 1
+	
+	f = open(out_fid, 'w')
+	f.writelines(lines)
+	f.close()
+
 def remove_bounding_box(fid, out_fid='out.svg'):
 	''' janky way '''
 	f = open(fid)
@@ -31,6 +50,7 @@ def save_strokes(strokes, dip_freq=0, az=1, el=1, fid='strokes.svg'):
 
 	for i,stroke in enumerate(strokes):
 		if dip_freq and i%dip_freq==0:
+			# add_dip
 			z = [0,1] if len(stroke[0]) == 3 else 0
 			ax.plot([0,1], [0,1], z, 'k-',lw=2)
 		xs = [p[0] for p in stroke]
@@ -43,6 +63,7 @@ def save_strokes(strokes, dip_freq=0, az=1, el=1, fid='strokes.svg'):
 	ax.set_aspect('equal')
 	plt.savefig(fid)
 	remove_bounding_box(fid,fid)
+	remove_ocd_paths(fid,fid)
 
 def save_wireframe(X,Y,Z, fid='wireframe_3d.svg'):
 	'''

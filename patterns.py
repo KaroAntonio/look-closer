@@ -2,80 +2,11 @@ import math
 import numpy as np
 from save_svg import *
 import noise
-
-
-def fx(i):
-	dy = math.cos(i*0.3)
-	return [
-			i*2+5,
-			i*2+5
-		]
-
-def fy(i):
-	dy = 3*math.cos(i*0.3)
-	return [
-			i+5,
-			55+i+dy+5
-		]
-
-def fx1(i):
-	dx = math.cos(i*0.5)-(i**0.8)
-	return [
-			i,
-			55+i	
-		]
-
-def fy1(i):
-	dy = 2*math.cos(i*0.3)
-	dy1 = 2*math.cos(i*0.3+math.pi/2)
-	return [
-			i,
-			i+dy
-		]
-
-def plot_circles(plt):
-	import matplotlib.patches as patches
-	for i in range(30):
-		#circle = plt.Circle((25+i, 25+i), (i+1)*2, color='black', fill=False)
-		dr = (1/30.)*math.cos(i*0.2+1)
-		plt.gca().add_patch(
-			patches.Circle(
-				(i/60.+0.25, dr*2+0.3),   # (x,y)
-				0.2+dr,          # radius
-				color='black',
-				fill=False
-			)
-		)
-
-def circle_points(x,y,r, n=50):
-	step = math.pi/n
-	th = np.arange(0,2*math.pi+step,step)
-	xs = r * np.cos(th) + x
-	ys = r * np.sin(th) + y
-	return np.array([xs,ys]).T
-
-def noise_line(i,n):
-	xs = np.arange(n)
-	ys = np.array([noise.pnoise2(e/float(n)*4,i*4) for e in xs])
-	ys *= 50
-	ys += i*230
-	return np.array([xs,ys]).T
-
-def curve(i,n):
-	xs = np.arange(n)+i
-	ys = 30 * np.sin((xs-i -20) * 1/25. ) 
-	ys += i*3
-	ys *= (math.sin(i*(math.pi/50.))*0.5)
-	ys += i*5
-	return np.array([xs,ys]).T
-
-def curve2(i,n):
-	xs = np.arange(n)+i
-	ys = 30 * np.sin((xs-i -20) * 1/25. ) 
-	ys += i*3
-	ys *= (math.sin(i*(math.pi/50.))*0.5)
-	ys += i*4
-	return np.array([ys,xs]).T
+import copy
+from geometry_primitives import *
+from grow_lines import *
+from obj import *
+from topography import *
 
 def noise_mesh():
 	lines = []
@@ -93,29 +24,6 @@ def gen_curves(n):
 		lines += [circle_points(75+i*2,75+i*2,i*4)]
 	return lines
 
-def gen_lines(n):
-	lines = []
-	for i in range(n):
-		lines += [[fx(i),fy(i)]]
-	for i in range(n):
-		pass
-		#lines += [[fx1(i),fy1(i)]]
-	return lines
-
-def gen_3d_mesh():
-	''' gen lines in 3d space '''
-
-
-	return lines
-
-def wireframe_to_lines(X,Y,Z):
-	lines = []
-	for i in range(len(X)):
-		lines += [[[X[i,j],Y[i,j],Z[i,j]] for j in range(X.shape[1])]]
-	for j in range(len(X)):
-		lines += [[[X[i,j],Y[i,j],Z[i,j]] for i in range(X.shape[1])]]
-	return lines
-
 def gen_wireframe(n):
 	idxs = np.matrix(np.arange(n))
 	ones = np.matrix(np.ones(n))
@@ -124,75 +32,203 @@ def gen_wireframe(n):
 	Z = np.sin(X*math.pi*1+1)-0.5*np.cos(Y*math.pi*1-3)
 	return X,Y,Z
 
-def gen_sphere(rs=1, n=50, x=0, y=0, z=0):
-	''' return lines that compose a sphere in 3d '''
+def gen_form(rs=1, n=50, rf=None, af=None, x=0, y=0, z=0, cp=200):
+	''' 
+	return lines that compose a sphere in 3d 
+	cp: the number of points per circle
+	rf: radius funtction
+	'''
 	lines = []
 	n = float(n)
 	#rs = 1 # radius sphere
 	for i in range(int(n)):
 		# radius inscribed circle
-		a = abs(1 - i/(n/2.))*rs # distance along sphere axis
-		rc = math.sqrt(rs**2 - a**2)
-		c2d = circle_points(x,y,rc, 100)
-		c3d = np.array([list(p)+[i/n*rs+(z-(rs/2.))] for p in c2d])
+		a = af(n,i,rs)
+		rc = rf(rs, a) 
+		c2d = circle_points(x,y,rc, cp)
+		# circle z coord
+		cz = i/(n/2.)*rs+(z-(rs/2.))
+		c3d = np.array([list(p)+[cz] for p in c2d])
 		lines += [c3d]
 	return np.array(lines)
 
-def perlin_sphere(rs=1, n=50, x=0, y=0, z=0, s=1, ns=0.04):
-	sphere = gen_sphere(rs, n, x, y, z)
-	rs = float(rs)
-	for line in sphere:
+def perlin_cubes(d=1, n=50, x=0, y=0, z=0, s=1, ns=0.5, o=3):
+	step = d/float(n)
+	cubes = []
+	for i in range(1,n+1):
+		cube = unit_cube()
+		cube = scale_lines(cube,i*step,i*step,i*step)
+		thx = i*step * math.pi*0.15
+		thy = i*step * math.pi*0.1
+		thz = i*step * math.pi*0.08*0
+		#cube = rotate_lines(cube,thx,thy,thz)
+		cube = apply_perlin(cube, s, ns, o)
+		cubes += list(cube)
+	return np.array(cubes)
+
+def sphere_array():
+	n = 5
+	n2 = n/2
+	array = []
+	for i in range(-n2,n2+1):
+		for j in range(-n2,n2+1):
+			sphere = perlin_sphere(rs=1,n=10, s = 0.9, ns = (0)*.1) 
+			th_x = (math.pi*0.5)
+			th_z = math.pi*n/2. * 0
+			sphere = rotate_lines(sphere,th_x = th_x, th_z=th_z)
+			sphere = translate_lines(sphere, dz=20,dx =i*2, dy=j*2)
+
+			array += list(sphere)
+
+	return np.array(array)
+
+def gen_triangles(n=50):
+	triangles = []
+	for i in range(n):
+		for j in range(1):
+			t = unit_triangle(40)
+			n = float(n)
+			di = i/n
+			dj = j/n 
+			th_x = math.pi*((-.5+dj)*0.1)*0 
+			th_z = math.pi*((-.5+di)) 
+			#t = rotate_lines(t,th_x=th_x, th_z=th_z)
+			sy = n
+			sx = n * ((1/3.)**.5)
+			a = ((1/3.)**.5)
+			b = .5
+			t = scale_lines(t,di*a,di*b,1)
+			triangles += list(t)
+			n = int(n)
+
+	return triangles 
+
+def apply_sin(lines):
+	lines = [np.array(l) for l in lines]
+	for line in lines:
+		for v in line:
+			v[0] += math.sin(v[1]*2+math.pi)*0.4
+	return lines
+
+def apply_perlin_axis(lines):
+	''' 
+	apply 2d perlin noise along a specific axis, 
+	given the other 2 as input
+	'''
+	mx = 0
+	my = 0
+	mz = 0
+	c = [0,0]
+	for line in lines:
 		for p in line:
-			px = x-p[0]
-			py = y-p[1]
-			pz = z-p[2]
-			nse = noise.pnoise3(px/(rs*s),py/(rs*s), pz/(rs*s)) 
-			p[0] += (x-p[0])*nse*rs*ns
-			p[1] += (y-p[1])*nse*rs*ns
-			p[2] += (z-p[2])*nse*rs*ns
-	return sphere
+			if abs(p[0])>mx: mx = p[0]
+			if abs(p[1])>my: my = p[1]	
+			if abs(p[2])>mz: mz = p[2]	
 
-def project_p3d(P,p3d):
-	'''
-	p3d: [x,y,z]
-	p2d: [x,y]
-	'''
-	p3d = np.concatenate([p3d,[1]])
-	p2d = P * np.matrix(p3d).T
-	p2d = np.array(p2d.T)[0]
-	p2d = (p2d/(p2d[-1]+1e-10))[:2]
-	return p2d
+	lines = [np.array(l) for l in lines]
+	for line in lines:
+		for v in line:
+			v[0] += noise.pnoise2(float(v[1])/my, v[2]/mz)
+	return lines
 
-def transform_p3d(T,p3d):
-	'''
-	T: transformation matrix
-	p3d: [x,y,z]
-	'''
+'''
+# perlin blob
+p_sphere = perlin_sphere(1, 130, s=0.9, ns=0.6, o=3)
+p_sphere = rotate_lines(p_sphere,th_x = math.pi*0.49, th_z=math.pi*.0)
+p_sphere = translate_lines(p_sphere, dz=50)
 
-def project_lines(lines_3d, P=None ):
-	if not P:
-		P = np.matrix([[1, 0, 0, 0],
-					[0, 1, 0, 0],	
-					[0, 0, 1, 0]])
+# perlin blob 2
+p_sphere2 = perlin_sphere(50, 30, s=0.9, ns=0.05)
+p_sphere2 = rotate_lines(p_sphere2,th_x = -math.pi*0.1, th_y=math.pi*0.3)
+p_sphere2 = translate_lines(p_sphere2, dz=100)
 
-	lines_2d = []
-	for line_3d in lines_3d:
-		line_2d = []
-		for p3d in line_3d:
-			p2d = project_p3d(P,p3d)
-			line_2d += [p2d]
-		lines_2d += [line_2d]
-	return np.array(lines_2d)
 
-#lines = gen_curves(50)
-#save_strokes(lines, dip_freq=0)
+# perlin form 
+af = lambda n,i,rs: ((i/n)*rs)*0.95
+rf = lambda rs,a: 1.4+a
+p_form = gen_form(1, n=50, rf=rf, af=af)
+p_form = apply_perlin(p_form, ns=0.5, s=0.9, o=4)
+p_form = rotate_lines(p_form, th_x = math.pi*0., th_y=math.pi*1)
+p_form = translate_lines(p_form, dz=8)
 
-lines = perlin_sphere(60,70,150,0,50, s=0.4, ns=0.01)
+# perlin form 2
+af = lambda n,i,rs: (i/n)*rs
+rf = lambda rs,a: 1 
+p_form2 = perlin_form(1, 120, rf=rf,af=af, s=0.9, ns=0.5, o=3)
+p_form2 = rotate_lines(p_form2, th_y = math.pi*0., th_x=math.pi*.48)
+p_form2 = translate_lines(p_form2, dz=100, dx=0.3)
+
+# another sphere
+small_sphere = gen_sphere(rs=1,n=130) 
+small_sphere = rotate_lines(small_sphere,th_x = math.pi*0., th_z=math.pi*0)
+small_sphere = translate_lines(small_sphere, dz=50, dy=-.5, dx=.5)
+
+# create sphere
+sphere = gen_sphere(rs=1,n=110) 
+sphere = rotate_lines(sphere,th_x = math.pi*0.49, th_z=math.pi*.0)
+sphere = translate_lines(sphere, dz=20)
+
+# create cube
+cube = unit_cube()
+cube = rotate_lines(cube, th_x = math.pi/5., th_y=math.pi/5)
+cube = translate_lines(cube, dz=50)
+
+# wireframe
+wireframe = wireframe_to_lines(*gen_wireframe(100))
+wireframe = rotate_lines(wireframe, th_z=math.pi*0.5)
+wireframe = apply_perlin(wireframe, s=1.1, ns=0.5, o=3)
+wireframe = apply_sin(wireframe)
+wireframe = rotate_lines(wireframe, th_x = math.pi*-0.5, th_z=math.pi*0.01)
+wireframe = translate_lines(wireframe, dz=3, dy=-0.4, dx=-0.3)
+
+s1 = copy.deepcopy(small_sphere)
+s2 = copy.deepcopy(small_sphere)
+s3 = copy.deepcopy(small_sphere)
+s4 = copy.deepcopy(small_sphere)
+
+o=0.11
+s1 = translate_lines(s1, dy=o, dx=o)
+s2 = translate_lines(s2, dy=o, dx=-o)
+s3 = translate_lines(s3, dy=-o, dx=o)
+s4 = translate_lines(s4, dy=-o, dx=-o)
+spheres = list(s1) + list(s2) + list(s3) + list(s4) 
+spheres = rotate_lines(spheres,th_z = math.pi*.25, th_y=math.pi*0)
+spheres = translate_lines(spheres, dz=50)
+
+p_cubes = perlin_cubes(n=40,ns=0)
+p_cubes = rotate_lines(p_cubes,th_y = math.pi*-.05, th_x=math.pi*-.06)
+p_cubes = translate_lines(p_cubes, dz=2)
+
+
+triangles = gen_triangles()
+triangles = translate_lines(triangles, dz=2, dx=0)
+triangles = apply_perlin(triangles, s=0.7, ns=0.8, o=3)
+triangles = rotate_lines(triangles,th_z = math.pi*-.25, th_x=math.pi*0)
+triangles = translate_lines(triangles, dz=50)
+'''
+
+fid = 'data/obj/rind.obj'
+objs = load_obj(fid)
+oid = objs.keys()[0]
+vs,fs,vns = objs[oid]
+cl = build_topography(vs, fs, n=120,ax=1)
+cl = apply_perlin(cl, s=0.8, ns=0.5, o=3)
+cl = rotate_lines(cl,th_x = math.pi*0.2, th_y=math.pi*.1)
+cl = translate_lines(cl, dz=200)
+
+#mesh = obj_to_lines(objs[oid])
+#mesh = rotate_lines(cl,th_x = math.pi*0.0, th_y=math.pi*.0)
+#mesh = translate_lines(mesh, dz=200)
+
 lines = []
-lines2 = perlin_sphere(70, 30, s=0.9, ns=0.02)
-lines2 = gen_sphere(z=50)
-#lines2 = []
+lines2 = []
+lines = cl 
+#lines2 = mesh
+
 lines_3d = list(lines) + list(lines2)  
-lines_2d = project_lines(lines_3d)
-save_strokes(lines_2d)
+lines_2d = project_lines(lines_3d, f=1)
+
+#lines_2d = apply_perlin2d(lines_2d,ns=.3,s=.3,o=2)
+
+save_strokes(lines_2d, dip_freq=0)
 
